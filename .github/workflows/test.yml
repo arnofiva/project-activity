@@ -22,4 +22,12 @@ jobs:
     - uses: actions/checkout@v2
     - uses: ./
       with:
-        milliseconds: 1000
+          token: ${{ secrets.GITHUB_TOKEN }}
+          smtp-server: "smtp.gmail.com"
+          smtp-server-port: "587"
+          auth-user: ""
+          auth-pwd: ""
+          email-from: ""
+          recipient-emails: ""
+          project-numbers: all
+          phase-calendar-days: 7
