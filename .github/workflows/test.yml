@@ -20,7 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - uses: ./
+    - name: Determine project changes since X days ago
+      uses: ./
+      id: project      
       with:
           token: ${{ secrets.GITHUB_TOKEN }}
           smtp-server: "smtp.gmail.com"
@@ -31,3 +33,8 @@ jobs:
           recipient-emails: ${{ secrets.RECIPIENT_EMAILS }}
           project-numbers: all
           days: 7
+    - name: Upload summary to artifacts
+      uses: actions/upload-artifact@v1
+      with:
+          name: kanban
+          path: kanban
