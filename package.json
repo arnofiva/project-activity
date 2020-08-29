@@ -6,7 +6,7 @@
   "scripts": {
     "lint": "eslint .",
     "prepare": "ncc build index.js -o dist --source-map",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "all": "npm run lint && npm run prepare && npm run test"
   },
   "repository": {
@@ -25,7 +25,13 @@
   },
   "homepage": "https://github.com/actions/javascript-action#readme",
   "dependencies": {
-    "@actions/core": "^1.1.1"
+    "@actions/core": "^1.1.1",
+    "@actions/github": "^4.0.0",
+    "@octokit/rest": "^18.0.4",
+    "fs": "0.0.1-security",
+    "make-dir": "^3.1.0",
+    "nodemailer": "^6.4.11",
+    "path": "^0.12.7"
   },
   "devDependencies": {
     "@vercel/ncc": "^0.24.0",
