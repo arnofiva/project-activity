@@ -1,6 +1,6 @@
 name: Project Activity
 author: Andy
-description: Generates an email summary of project activity for a repo.  The summary shows which cards have moved, been added or with new comments.
+description: Generates an email summary of project activity, showing issues that have moved, been added or commented.
 inputs:
     token:
         description: "Github Token"
