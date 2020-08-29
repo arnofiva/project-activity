@@ -60,7 +60,7 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - name: Project changes past 7 days
-              uses: ./.github/actions/project
+              uses: adgcz/project-activity@v1
               id: project
               with:
                   token: ${{ secrets.GITHUB_TOKEN }}
