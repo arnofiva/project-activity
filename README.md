@@ -22,7 +22,7 @@ This action emails a summary of recent project activity in a repo and generates 
 
 ### `auth-pwd`
 
-**Required** Sender user password
+**Required** Sender user password (for gmail, you can use an app password)
 
 ### `email-from`
 
@@ -30,15 +30,15 @@ This action emails a summary of recent project activity in a repo and generates 
 
 ### `recipient-emails`
 
-**Required** Recipient email addresses
+**Required** Recipient email addresses (comma-separated)
 
 ### `project-numbers`
 
-**Required** Project Numbers
+**Required** Project Numbers (comma-separated) or all
 
 ### `days`
 
-**Required** Days back
+**Required** Days back (number of days to query from current date backwards)
 
 ## Outputs
 
