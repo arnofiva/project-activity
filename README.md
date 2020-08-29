@@ -1,6 +1,9 @@
 # Github Project Activity
 
-This action emails a summary of recent project activity in a repo and generates an artifact of the summary
+This action emails a summary of recent project activity in a repo and generates an artifact of the summary. 
+
+see sample summary:
+    * <a href="sample.html">sample email content</a>
 
 ## Inputs
 
