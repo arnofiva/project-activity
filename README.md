@@ -45,7 +45,8 @@ see a sample summary (once viewing the sample, mouse over the link of an issue t
 
 ## Outputs
 
-### artifact file with summary in html
+### generates email with project activity summary and sends to specified recipients
+### uploads artifact html file with same project activity summary
 
 ## Example usage
 
