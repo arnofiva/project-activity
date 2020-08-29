@@ -25,9 +25,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           smtp-server: "smtp.gmail.com"
           smtp-server-port: "587"
-          auth-user: ""
-          auth-pwd: ""
-          email-from: ""
-          recipient-emails: ""
+          auth-user: ${{ secrets.EMAIL_USR }}
+          auth-pwd: ${{ secrets.EMAIL_PWD }}
+          email-from: ${{ secrets.EMAIL_FROM }}
+          recipient-emails: ${{ secrets.RECIPIENT_EMAILS }}
           project-numbers: all
           phase-calendar-days: 7
