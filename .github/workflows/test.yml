@@ -30,4 +30,4 @@ jobs:
           email-from: ${{ secrets.EMAIL_FROM }}
           recipient-emails: ${{ secrets.RECIPIENT_EMAILS }}
           project-numbers: all
-          phase-calendar-days: 7
+          days: 7
