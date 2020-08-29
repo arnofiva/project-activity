@@ -2,7 +2,7 @@
 
 This action emails a summary of recent project activity in a repo and generates an artifact of the summary. 
 
-see a sample summary (once viewing the sample, mouse over the link of a moved issue to see a tool tip summarising its flow):
+see a sample summary (once viewing the sample, mouse over the link of an issue to see a tool tip summarising its flow through kanban columns):
     * <a href="http://htmlpreview.github.com/?https://github.com/adgcz/project-activity/blob/main/sample.html">sample email content</a>
 
 ## Inputs
