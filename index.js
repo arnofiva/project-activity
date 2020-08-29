@@ -284,13 +284,13 @@ async function run() {
         // TODO: validate recipients and other email input
         if (recipientEmails.indexOf("@") > -1) {
             let subject =
-                "Projects " +
+                "Project activity " +
                 owner +
                 "/" +
                 repo +
                 " - past " +
                 daysToQuery +
-                " days activity";
+                " days";
             let isTLS = false;
             const transport = nodemailer.createTransport({
                 host: smtpServer,
