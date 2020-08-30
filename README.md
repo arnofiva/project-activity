@@ -61,7 +61,7 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - name: Project changes past 7 days
-              uses: adgcz/project-activity@v1.0.3
+              uses: adgcz/project-activity@v1.0.0
               id: project
               with:
                   token: ${{ secrets.GITHUB_TOKEN }}
