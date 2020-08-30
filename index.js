@@ -245,6 +245,7 @@ async function run() {
                 projectKanbans.push(
                     drawKanban(
                         repo_projects.data[p].name,
+                        repo_projects.data[p].html_url,
                         kanbanColumns,
                         daysToQuery
                     )
@@ -320,13 +321,13 @@ function get_from(from, username) {
     return `"${from}" <${username}>`;
 }
 
-function drawKanban(projectName, columns, days_ago) {
+function drawKanban(projectName, projectUrl, columns, days_ago) {
     const today = new Date();
     const groups = ["No change", "Moved here", "Added"];
     return (
-        '<br/><div class="project"><span class="projectname">' +
+        '<br/><div class="project"><span class="projectname"><a href="'+projectUrl+'">' +
         projectName +
-        "</span><br/>" +
+        "</a></span><br/>" +
         " past " +
         days_ago +
         " days activity (as at " +
