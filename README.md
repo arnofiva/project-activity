@@ -1,7 +1,9 @@
 # Github Project Activity
 
 Using a github Project kanban boards for tracking issues? 
-This action generates a summary of recent project board activity both as an email and an artifact. 
+For a specified number of recent days, this action generates a summary of project board activity, both as an email and an artifact.  
+
+For example, schedule the action to run each Monday morning to receive a summary of the past 7 days activity showing moved isses, new issues and issues with new comments.
 
 See a sample summary (once viewing the sample, mouse over the link of an issue to see a tool tip summarising its flow through kanban columns):
     * <a href="http://htmlpreview.github.com/?https://github.com/adgcz/project-activity/blob/main/sample.html">sample email content</a>
