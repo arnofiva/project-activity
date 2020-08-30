@@ -48,8 +48,8 @@ See a sample summary (once viewing the sample, mouse over the link of an issue t
 
 ## Outputs
 
-Generates email with project activity summary and sends to specified recipients
-Uploads an artifact file associated to each action run, with the same project activity summary
+Generates **email** with project activity summary and sends to specified recipients. 
+Uploads an **artifact file** associated to each action run, with the same project activity summary.
 
 ## Example usage
 
