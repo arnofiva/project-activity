@@ -252,6 +252,7 @@ async function run() {
                 projectKanbans.push(
                     drawKanban(
                         repo_projects.data[p].name,
+                        repo_projects.data[p].html_url,
                         kanbanColumns,
                         daysToQuery
                     )
@@ -261,7 +262,7 @@ async function run() {
 
         // TODO: can CSS be input?
         const cssStyle =
-            "<head><style>" +
+            "<style>" +
             " ul {padding: 12px;} ul li {list-style-type: circle;}" +
             " .project {overflow-x:auto; text-align: center; } " +
             " .projectname {font-size:large; font-weight: bold; } " +
@@ -273,16 +274,16 @@ async function run() {
             " .column { font-weight: bold; text-align: center;    }" +
             " table { width: 100%; padding: 4px; border-spacing: 4px;}" +
             " td {background-color: #f0efef; width:150px; padding: 8px; vertical-align: top; text-align:left; border: 1px solid #cccccc;  border-radius: 6px;} " +
-            " </style><head>";
+            " </style>";
 
         // save snapshot as artifact for action run
         const path = "kanban/index.html";
         await makeDir(dirname(path));
         appendFileSync(
             path,
-            "<html>" +
+            "<html><head>" +
                 cssStyle +
-                "<body>" +
+                "</head><body>" +
                 projectKanbans.join("") +
                 "</body></html>"
         );
@@ -291,13 +292,13 @@ async function run() {
         // TODO: validate recipients and other email input
         if (recipientEmails.indexOf("@") > -1) {
             let subject =
-                "Projects " +
+                "Project activity " +
                 owner +
                 "/" +
                 repo +
                 " - past " +
                 daysToQuery +
-                " days activity";
+                " days";
             let isTLS = false;
             const transport = nodemailer.createTransport({
                 host: smtpServer,
@@ -327,13 +328,13 @@ function get_from(from, username) {
     return `"${from}" <${username}>`;
 }
 
-function drawKanban(projectName, columns, days_ago) {
+function drawKanban(projectName, projectUrl, columns, days_ago) {
     const today = new Date();
     const groups = ["No change", "Moved here", "Added"];
     return (
-        '<br/><div class="project"><span class="projectname">' +
+        '<br/><div class="project"><span class="projectname"><a href="'+projectUrl+'">' +
         projectName +
-        "</span><br/>" +
+        "</a></span><br/>" +
         " past " +
         days_ago +
         " days activity (as at " +
