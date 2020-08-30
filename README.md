@@ -1,8 +1,9 @@
 # Github Project Activity
 
-This action emails a summary of recent project activity in a repo and generates an artifact of the summary. 
+Using a github Project kanban boards for tracking issues? 
+This action generates a summary of recent project board activity both as an email and an artifact. 
 
-see a sample summary (once viewing the sample, mouse over the link of an issue to see a tool tip summarising its flow through kanban columns):
+See a sample summary (once viewing the sample, mouse over the link of an issue to see a tool tip summarising its flow through kanban columns):
     * <a href="http://htmlpreview.github.com/?https://github.com/adgcz/project-activity/blob/main/sample.html">sample email content</a>
 
 ## Inputs
@@ -45,8 +46,8 @@ see a sample summary (once viewing the sample, mouse over the link of an issue t
 
 ## Outputs
 
-### generates email with project activity summary and sends to specified recipients
-### uploads artifact html file with same project activity summary
+Generates email with project activity summary and sends to specified recipients
+Uploads an artifact file associated to each action run, with the same project activity summary
 
 ## Example usage
 
