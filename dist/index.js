@@ -262,7 +262,7 @@ async function run() {
 
         // TODO: can CSS be input?
         const cssStyle =
-            "<style>" +
+            "<head><style>" +
             " ul {padding: 12px;} ul li {list-style-type: circle;}" +
             " .project {overflow-x:auto; text-align: center; } " +
             " .projectname {font-size:large; font-weight: bold; } " +
@@ -274,16 +274,16 @@ async function run() {
             " .column { font-weight: bold; text-align: center;    }" +
             " table { width: 100%; padding: 4px; border-spacing: 4px;}" +
             " td {background-color: #f0efef; width:150px; padding: 8px; vertical-align: top; text-align:left; border: 1px solid #cccccc;  border-radius: 6px;} " +
-            " </style>";
+            " </style></head>";
 
         // save snapshot as artifact for action run
         const path = "kanban/index.html";
         await makeDir(dirname(path));
         appendFileSync(
             path,
-            "<html><head>" +
+            "<html>" +
                 cssStyle +
-                "</head><body>" +
+                "<body>" +
                 projectKanbans.join("") +
                 "</body></html>"
         );
