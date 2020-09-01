@@ -145,11 +145,16 @@ async function run() {
                             );
 
                             // filter on time period
-                            let columnChange = false;
-                            let newIssue = false;
                             const relevant_events = [];
 
-                            //TODO: notes added then converted
+                            let issueGroup = 0;
+                            // 0 - no change
+                            // 1 - moved_columns_in_project
+                            // 2 - added_to_project, converted_note_to_issue
+                            // 3 - reopened
+                            // 4 - closed
+                            // 5 - removed_from_project (TODO)
+
                             for (let e = 0; e < events_summary.length; e++) {
                                 // filter out events outside time range
                                 if (
@@ -157,16 +162,22 @@ async function run() {
                                         daysToQuery &&
                                     events_summary[e].days_ago <= 0
                                 ) {
-                                    columnChange = true;
-                                    if (
-                                        events_summary[e].event ===
-                                            "added_to_project" ||
-                                        events_summary[e].event ===
-                                            "converted_note_to_issue"
-                                    ) {
-                                        newIssue = true;
-                                    }
                                     relevant_events.push(events_summary[e]);
+
+                                    // most relevant change determines grouping
+                                    if(events_summary[e].event ===
+                                        "moved_columns_in_project" && issueGroup===0){
+                                            issueGroup = 1;
+                                    }
+                                    if(events_summary[e].event === "added_to_project" || events_summary[e].event === "converted_note_to_issue"){
+                                        issueGroup = 2;
+                                    }
+                                    if(events_summary[e].event === "reopened" ){
+                                        issueGroup = 3;
+                                    }                                                               
+                                    if(events_summary[e].event === "closed" ){
+                                        issueGroup = 4;
+                                    } 
                                 }
                             }
 
@@ -222,12 +233,11 @@ async function run() {
                             ).length;
 
                             // store card for email content
-                            const group = !columnChange ? 0 : !newIssue ? 1 : 2;
                             kanbanColumns[col].issues.push({
                                 id: issue_number,
                                 html_url: issue.data.html_url,
                                 title: issue.data.title,
-                                group: group,
+                                group: issueGroup,
                                 flow: flow,
                                 total_comments: total_comments,
                                 period_comments: period_comments,
@@ -264,7 +274,9 @@ async function run() {
             " .grouping0  {background-color: #f0efef;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
             " .grouping1  {background-color: #ddeedd;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
             " .grouping2  {background-color: #c2d4dd;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
-            " .column { font-weight: bold; text-align: center;    }" +
+            " .grouping3  {background-color: #eaece5;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
+            " .grouping4  {background-color: #b2c2bf;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
+            " .grouping5  {background-color: #f0efef;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +            " .column { font-weight: bold; text-align: center;    }" +
             " table { width: 100%; padding: 4px; border-spacing: 4px;}" +
             " td {background-color: #f0efef; width:150px; padding: 8px; vertical-align: top; text-align:left; border: 1px solid #cccccc;  border-radius: 6px;} " +
             " </style></head>";
@@ -323,7 +335,7 @@ function get_from(from, username) {
 
 function drawKanban(projectName, projectUrl, columns, days_ago) {
     const today = new Date();
-    const groups = ["No change", "Moved here", "Added"];
+    const groups = ["No change", "Moved here", "Added","Reopened","Closed","Removed"];
     return (
         '<br/><div class="project"><span class="projectname"><a href="'+projectUrl+'">' +
         projectName +
