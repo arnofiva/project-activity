@@ -79,6 +79,72 @@ async function run() {
                     };
                 });
 
+                // get repo issues updated in last 30 days
+                const since = new Date(new Date().getTime() - (30 * 1000 * 3600 * 24));
+                const issues_since = await octokit.request(
+                    'GET /repos/{owner}/{repo}/issues', 
+                    {
+                    owner,
+                    repo,
+                    since: since
+                  });
+
+                // for issues updated in last 30 days, get removals and additions to projects
+                const remove_events = [];
+                for (let i = 0; i < issues_since.data.length; i++) {  
+
+                    const update_issue_events = await octokit.request(
+                        "GET /repos/{owner}/{repo}/issues/:issue_number/events",
+                        {
+                            owner,
+                            repo,
+                            issue_number: issues_since.data[i].number, 
+                        }
+                    );  
+
+                    const removals = update_issue_events.data.filter(
+                        (ev) => {
+                            return (
+                                (ev.event === "removed_from_project" || ev.event === "added_to_project") && ev.project_card.project_id === project_id
+                            )
+                        }
+                    );
+
+                    // sort date ascending
+                    removals.sort((a, b) =>
+                        a.created_at > b.created_at ? 1 : -1
+                    );
+
+                    // save relevant events for issue
+                    for(remove_ev in removals ){
+                        remove_events.push(
+                            {
+                                "issue_number": issues_since.data[i].number,
+                                "event": removals[remove_ev].event,
+                                "created_at": removals[remove_ev].created_at,
+                                "html_url": issues_since.data[i].html_url,
+                                "title": issues_since.data[i].title
+                            }
+                        );
+                    }
+                    
+                } 
+
+                // removed issues - filter out those that were subsequently added back
+                const removed_issues = remove_events.filter( (ev,i,array) => { 
+                    if(ev.event.toString()==='removed_from_project') {   
+                        for(let subsequent=i+1;subsequent < array.length;subsequent++ ){
+                            if(array[subsequent].issue_number.toString() ===  ev.issue_number.toString() && array[subsequent].event === "added_to_project"){
+                              return false; // ignore removals that were added back
+                            }
+                        }
+                        return true; // keep removals not re-added
+                    }else{
+                        return false; // ignore adds
+                    }
+                });
+
+
                 // iterate columns
                 for (let col = 0; col < columns.data.length; col++) {
                     // get cards for column
@@ -257,9 +323,11 @@ async function run() {
                         repo_projects.data[p].name,
                         repo_projects.data[p].html_url,
                         kanbanColumns,
-                        daysToQuery
+                        daysToQuery,
+                        removed_issues
                     )
                 );
+
             }
         }
 
@@ -333,7 +401,7 @@ function get_from(from, username) {
     return `"${from}" <${username}>`;
 }
 
-function drawKanban(projectName, projectUrl, columns, days_ago) {
+function drawKanban(projectName, projectUrl, columns, days_ago, removedIssues) {
     const today = new Date();
     const groups = ["No change", "Moved here", "Added","Reopened","Closed","Removed"];
     return (
@@ -349,6 +417,15 @@ function drawKanban(projectName, projectUrl, columns, days_ago) {
         "/" +
         today.getFullYear() +
         ")" +
+        (removedIssues.length>0 ? '<div class="removed"><span class="grouphead">Removed issues</span><br/>'+
+        removedIssues.map((issue) => {
+            return (
+                '<a title="" href="'+issue.html_url+'" class="group0">' +
+                issue.title +
+                "</a> " 
+            );
+        }).join("") +'</div>'
+    :'')+
         "<table><tr>" +
         columns
             .map(function (element) {
@@ -399,7 +476,8 @@ function drawKanban(projectName, projectUrl, columns, days_ago) {
                 );
             })
             .join("") +
-        "</tr></table></div><br/>"
+        "</tr></table>"+
+        "</div><br/>"
     );
 }
 
