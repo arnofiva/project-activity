@@ -69,6 +69,7 @@ async function run() {
                 ) > -1
             ) {
                 // get columns for project
+                const project_id = repo_projects.data[p].id;
                 const columns = await octokit.request(
                     "GET /projects/:project_id/columns",
                     {
