@@ -58,6 +58,58 @@ async function run() {
             }
         );
 
+        // get repo issues updated in last 30 days
+        const since = new Date(new Date().getTime() - (30 * 1000 * 3600 * 24));
+        const issues_since = await octokit.request(
+            'GET /repos/{owner}/{repo}/issues', 
+            {
+            owner,
+            repo,
+            since: since
+            });
+
+        // for issues updated in last 30 days, get removals and additions to projects
+        const remove_events = [];
+        for (let i = 0; i < issues_since.data.length; i++) {  
+
+            const update_issue_events = await octokit.request(
+                "GET /repos/{owner}/{repo}/issues/:issue_number/events",
+                {
+                    owner,
+                    repo,
+                    issue_number: issues_since.data[i].number, 
+                }
+            );  
+
+            const removals = update_issue_events.data.filter(
+                (ev) => {
+                    return (
+                        (ev.event === "removed_from_project" || ev.event === "added_to_project") && ev.project_card.project_id === project_id
+                    )
+                }
+            );
+
+            // sort date ascending
+            removals.sort((a, b) =>
+                a.created_at > b.created_at ? 1 : -1
+            );
+
+            // save relevant events for issue
+            for(remove_ev in removals ){
+                remove_events.push(
+                    {
+                        "issue_number": issues_since.data[i].number,
+                        "event": removals[remove_ev].event,
+                        "created_at": removals[remove_ev].created_at,
+                        "html_url": issues_since.data[i].html_url,
+                        "title": issues_since.data[i].title,
+                        "project_id": removals[remove_ev].project_card.project_id
+                    }
+                );
+            }
+            
+        } 
+
         // iterate projects in repo
         const projectKanbans = [];
         for (let p = 0; p < repo_projects.data.length; p++) {
@@ -87,60 +139,9 @@ async function run() {
                     };
                 });
 
-                // get repo issues updated in last 30 days
-                const since = new Date(new Date().getTime() - (30 * 1000 * 3600 * 24));
-                const issues_since = await octokit.request(
-                    'GET /repos/{owner}/{repo}/issues', 
-                    {
-                    owner,
-                    repo,
-                    since: since
-                  });
-
-                // for issues updated in last 30 days, get removals and additions to projects
-                const remove_events = [];
-                for (let i = 0; i < issues_since.data.length; i++) {  
-
-                    const update_issue_events = await octokit.request(
-                        "GET /repos/{owner}/{repo}/issues/:issue_number/events",
-                        {
-                            owner,
-                            repo,
-                            issue_number: issues_since.data[i].number, 
-                        }
-                    );  
-
-                    const removals = update_issue_events.data.filter(
-                        (ev) => {
-                            return (
-                                (ev.event === "removed_from_project" || ev.event === "added_to_project") && ev.project_card.project_id === project_id
-                            )
-                        }
-                    );
-
-                    // sort date ascending
-                    removals.sort((a, b) =>
-                        a.created_at > b.created_at ? 1 : -1
-                    );
-
-                    // save relevant events for issue
-                    for(remove_ev in removals ){
-                        remove_events.push(
-                            {
-                                "issue_number": issues_since.data[i].number,
-                                "event": removals[remove_ev].event,
-                                "created_at": removals[remove_ev].created_at,
-                                "html_url": issues_since.data[i].html_url,
-                                "title": issues_since.data[i].title
-                            }
-                        );
-                    }
-                    
-                } 
-
                 // removed issues - filter out those that were subsequently added back
                 const removed_issues = remove_events.filter( (ev,i,array) => { 
-                    if(ev.event.toString()==='removed_from_project') {   
+                    if(ev.event.toString()==='removed_from_project' && ev.project_id===project_id) {   
                         for(let subsequent=i+1;subsequent < array.length;subsequent++ ){
                             if(array[subsequent].issue_number.toString() ===  ev.issue_number.toString() && array[subsequent].event === "added_to_project"){
                               return false; // ignore removals that were added back
@@ -151,7 +152,6 @@ async function run() {
                         return false; // ignore adds
                     }
                 });
-
 
                 // iterate columns
                 for (let col = 0; col < columns.data.length; col++) {
@@ -343,6 +343,7 @@ async function run() {
         const cssStyle =
             "<head><style>" +
             " ul {padding: 12px;} ul li {list-style-type: circle;}" +
+            " .removed {align: center; width: 100%; padding: 4px; vertical-align: top; text-align:left;} "+
             " .project {overflow-x:auto; text-align: center; } " +
             " .projectname {font-size:large; font-weight: bold; } " +
             " a.comments {color:purple; font-style: italic; font-size: small; font-weight: bold;} " +
