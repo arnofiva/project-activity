@@ -84,7 +84,7 @@ async function run() {
             const removals = update_issue_events.data.filter(
                 (ev) => {
                     return (
-                        (ev.event === "removed_from_project" || ev.event === "added_to_project") && ev.project_card.project_id === project_id
+                        (ev.event === "removed_from_project" || ev.event === "added_to_project") 
                     )
                 }
             );
