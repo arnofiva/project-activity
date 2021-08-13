@@ -1,9 +1,8 @@
 const core = require("@actions/core");
-const github = require("@actions/github");
 const { Octokit } = require("@octokit/rest");
 const nodemailer = require("nodemailer");
 const { dirname } = require("path");
-const { existsSync, appendFileSync } = require("fs");
+const { appendFileSync } = require("fs");
 const makeDir = require("make-dir");
 
 async function run() {
@@ -18,10 +17,10 @@ async function run() {
         const recipientEmails = core.getInput("recipient-emails"); // secret
         // scope of data
         const projectNumbers = core.getInput("project-numbers"); // secret
-        const phaseEndDate = core.getInput("phase-end-date"); //
+        // const phaseEndDate = core.getInput("phase-end-date"); //
         const phaseCalendarDays = core.getInput("days"); //
 
-        const projectsToQuery = [];
+        let projectsToQuery = [];
 
         if (projectNumbers.toLowerCase() !== "all") {
             try {
@@ -54,30 +53,30 @@ async function run() {
         // get repo issues updated in last 30 days
         const since = new Date(new Date().getTime() - (30 * 1000 * 3600 * 24));
         const issues_since = await octokit.request(
-            'GET /repos/{owner}/{repo}/issues', 
+            'GET /repos/{owner}/{repo}/issues',
             {
-            owner,
-            repo,
-            since: since
+                owner,
+                repo,
+                since: since
             });
 
         // for issues updated in last 30 days, get removals and additions to projects
         const remove_events = [];
-        for (let i = 0; i < issues_since.data.length; i++) {  
+        for (let i = 0; i < issues_since.data.length; i++) {
 
             const update_issue_events = await octokit.request(
                 "GET /repos/{owner}/{repo}/issues/:issue_number/events",
                 {
                     owner,
                     repo,
-                    issue_number: issues_since.data[i].number, 
+                    issue_number: issues_since.data[i].number,
                 }
-            );  
+            );
 
             const removals = update_issue_events.data.filter(
                 (ev) => {
                     return (
-                        (ev.event === "removed_from_project" || ev.event === "added_to_project") 
+                        (ev.event === "removed_from_project" || ev.event === "added_to_project")
                     )
                 }
             );
@@ -88,7 +87,7 @@ async function run() {
             );
 
             // save relevant events for issue
-            for(remove_ev in removals ){
+            for (const remove_ev in removals) {
                 remove_events.push(
                     {
                         "issue_number": issues_since.data[i].number,
@@ -100,8 +99,8 @@ async function run() {
                     }
                 );
             }
-            
-        } 
+
+        }
 
         // iterate projects in repo
         const projectKanbans = [];
@@ -133,15 +132,15 @@ async function run() {
                 });
 
                 // removed issues - filter out those that were subsequently added back
-                const removed_issues = remove_events.filter( (ev,i,array) => { 
-                    if(ev.event.toString()==='removed_from_project' && ev.project_id===project_id) {   
-                        for(let subsequent=i+1;subsequent < array.length;subsequent++ ){
-                            if(array[subsequent].issue_number.toString() ===  ev.issue_number.toString() && array[subsequent].event === "added_to_project"){
-                              return false; // ignore removals that were added back
+                const removed_issues = remove_events.filter((ev, i, array) => {
+                    if (ev.event.toString() === 'removed_from_project' && ev.project_id === project_id) {
+                        for (let subsequent = i + 1; subsequent < array.length; subsequent++) {
+                            if (array[subsequent].issue_number.toString() === ev.issue_number.toString() && array[subsequent].event === "added_to_project") {
+                                return false; // ignore removals that were added back
                             }
                         }
                         return true; // keep removals not re-added
-                    }else{
+                    } else {
                         return false; // ignore adds
                     }
                 });
@@ -159,7 +158,7 @@ async function run() {
                     );
 
                     // iterate cards
-                    for (columnCard in cards.data) {
+                    for (const columnCard in cards.data) {
                         // get card details
                         const card = await octokit.request(
                             "GET /projects/columns/cards/:card_id",
@@ -226,40 +225,40 @@ async function run() {
                                 // filter out events outside time range
                                 if (
                                     Math.abs(events_summary[e].days_ago) <=
-                                        daysToQuery &&
+                                    daysToQuery &&
                                     events_summary[e].days_ago <= 0
                                 ) {
                                     relevant_events.push(events_summary[e]);
 
                                     // most relevant change determines grouping
-                                    if(events_summary[e].event ===
-                                        "moved_columns_in_project" && issueGroup===0){
-                                            issueGroup = 1;
+                                    if (events_summary[e].event ===
+                                        "moved_columns_in_project" && issueGroup === 0) {
+                                        issueGroup = 1;
                                     }
-                                    if(events_summary[e].event === "added_to_project" || events_summary[e].event === "converted_note_to_issue"){
+                                    if (events_summary[e].event === "added_to_project" || events_summary[e].event === "converted_note_to_issue") {
                                         issueGroup = 2;
                                     }
-                                    if(events_summary[e].event === "reopened" ){
+                                    if (events_summary[e].event === "reopened") {
                                         issueGroup = 3;
-                                    }                                                               
-                                    if(events_summary[e].event === "closed" ){
+                                    }
+                                    if (events_summary[e].event === "closed") {
                                         issueGroup = 4;
-                                    } 
+                                    }
                                 }
                             }
 
                             // describe flow between now and days ago
                             const flow = relevant_events
-                                .map((ev, i, arr) => {
+                                .map((ev, i) => {
                                     return ev.project_card &&
                                         ev.project_card.column_name
                                         ? (i == 0 &&
-                                          ev.project_card.previous_column_name
-                                              ? ev.project_card
-                                                    .previous_column_name +
-                                                " -> "
-                                              : "") +
-                                              ev.project_card.column_name
+                                            ev.project_card.previous_column_name
+                                            ? ev.project_card
+                                                .previous_column_name +
+                                            " -> "
+                                            : "") +
+                                        ev.project_card.column_name
                                         : ev.event;
                                 })
                                 .join(" -> ");
@@ -336,7 +335,7 @@ async function run() {
         const cssStyle =
             "<head><style>" +
             " ul {padding: 12px;} ul li {list-style-type: circle;}" +
-            " .removed {align: center; width: 100%; padding: 4px; vertical-align: top; text-align:left;} "+
+            " .removed {align: center; width: 100%; padding: 4px; vertical-align: top; text-align:left;} " +
             " .project {overflow-x:auto; text-align: center; } " +
             " .projectname {font-size:large; font-weight: bold; } " +
             " a.comments {color:purple; font-style: italic; font-size: small; font-weight: bold;} " +
@@ -346,7 +345,7 @@ async function run() {
             " .grouping2  {background-color: #c2d4dd;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
             " .grouping3  {background-color: #eaece5;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
             " .grouping4  {background-color: #b2c2bf;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
-            " .grouping5  {background-color: #f0efef;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +            " .column { font-weight: bold; text-align: center;    }" +
+            " .grouping5  {background-color: #f0efef;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" + " .column { font-weight: bold; text-align: center;    }" +
             " table { width: 100%; padding: 4px; border-spacing: 4px;}" +
             " td {background-color: #f0efef; width:150px; padding: 8px; vertical-align: top; text-align:left; border: 1px solid #cccccc;  border-radius: 6px;} " +
             " </style></head>";
@@ -357,10 +356,10 @@ async function run() {
         appendFileSync(
             path,
             "<html>" +
-                cssStyle +
-                "<body>" +
-                projectKanbans.join("") +
-                "</body></html>"
+            cssStyle +
+            "<body>" +
+            projectKanbans.join("") +
+            "</body></html>"
         );
 
         // email kanbans
@@ -384,7 +383,7 @@ async function run() {
                     pass: authPwd,
                 },
             });
-            const info = await transport.sendMail({
+            await transport.sendMail({
                 from: get_from(emailFrom, authUser),
                 to: recipientEmails,
                 subject: subject,
@@ -405,9 +404,9 @@ function get_from(from, username) {
 
 function drawKanban(projectName, projectUrl, columns, days_ago, removedIssues) {
     const today = new Date();
-    const groups = ["No change", "Moved here", "Added","Reopened","Closed","Removed"];
+    const groups = ["No change", "Moved here", "Added", "Reopened", "Closed", "Removed"];
     return (
-        '<br/><div class="project"><span class="projectname"><a href="'+projectUrl+'">' +
+        '<br/><div class="project"><span class="projectname"><a href="' + projectUrl + '">' +
         projectName +
         "</a></span><br/>" +
         " past " +
@@ -419,15 +418,15 @@ function drawKanban(projectName, projectUrl, columns, days_ago, removedIssues) {
         "/" +
         today.getFullYear() +
         ")" +
-        (removedIssues.length>0 ? '<div class="removed"><span class="grouphead">Removed issues</span><br/>'+
-        removedIssues.map((issue) => {
-            return (
-                '<a title="" href="'+issue.html_url+'" class="group0">' +
-                issue.title +
-                "</a> " 
-            );
-        }).join("") +'</div>'
-    :'')+
+        (removedIssues.length > 0 ? '<div class="removed"><span class="grouphead">Removed issues</span><br/>' +
+            removedIssues.map((issue) => {
+                return (
+                    '<a title="" href="' + issue.html_url + '" class="group0">' +
+                    issue.title +
+                    "</a> "
+                );
+            }).join("") + '</div>'
+            : '') +
         "<table><tr>" +
         columns
             .map(function (element) {
@@ -438,47 +437,47 @@ function drawKanban(projectName, projectUrl, columns, days_ago, removedIssues) {
                     (element.issues.length === 0
                         ? '<div style="text-align:center;">No issues</div>'
                         : element.issues
-                              .map((issue, i, arr) => {
-                                  return (
-                                      (i > 0 && arr[i - 1].group !== issue.group
-                                          ? "</div>"
-                                          : "") +
-                                      (i === 0 ||
-                                      arr[i - 1].group !== issue.group
-                                          ? '<br/><div class="grouping' +
-                                            issue.group +
-                                            '"><div class="grouphead">' +
-                                            groups[issue.group] +
-                                            "</div>"
-                                          : "") +
-                                      '<li><a title="' +
-                                      issue.flow +
-                                      '" href="' +
-                                      issue.html_url +
-                                      '" class="group' +
-                                      issue.group +
-                                      '">' +
-                                      issue.title +
-                                      "</a> " +
-                                      (issue.period_comments > 0
-                                          ? ' <a class="comments" title="' +
-                                            issue.period_comments +
-                                            " of " +
-                                            issue.total_comments +
-                                            '" href="' +
-                                            issue.html_url +
-                                            '">new comments</a>'
-                                          : "") +
-                                      "</li>" +
-                                      (i === arr.length - 1 ? "</div>" : "")
-                                  );
-                              })
-                              .join("")) +
+                            .map((issue, i, arr) => {
+                                return (
+                                    (i > 0 && arr[i - 1].group !== issue.group
+                                        ? "</div>"
+                                        : "") +
+                                    (i === 0 ||
+                                        arr[i - 1].group !== issue.group
+                                        ? '<br/><div class="grouping' +
+                                        issue.group +
+                                        '"><div class="grouphead">' +
+                                        groups[issue.group] +
+                                        "</div>"
+                                        : "") +
+                                    '<li><a title="' +
+                                    issue.flow +
+                                    '" href="' +
+                                    issue.html_url +
+                                    '" class="group' +
+                                    issue.group +
+                                    '">' +
+                                    issue.title +
+                                    "</a> " +
+                                    (issue.period_comments > 0
+                                        ? ' <a class="comments" title="' +
+                                        issue.period_comments +
+                                        " of " +
+                                        issue.total_comments +
+                                        '" href="' +
+                                        issue.html_url +
+                                        '">new comments</a>'
+                                        : "") +
+                                    "</li>" +
+                                    (i === arr.length - 1 ? "</div>" : "")
+                                );
+                            })
+                            .join("")) +
                     "</td>"
                 );
             })
             .join("") +
-        "</tr></table>"+
+        "</tr></table>" +
         "</div><br/>"
     );
 }
