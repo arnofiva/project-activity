@@ -33,7 +33,7 @@ class MailSender {
             },
         });
         transport.sendMail({
-            from: emailFrom.match(/.+<.+@.+>/) ?  emailFrom : `"${emailFrom}" <${this.authUser}>`,
+            from: emailFrom.match(/.+<.+@.+>/) ? emailFrom : `"${emailFrom}" <${this.authUser}>`,
             to: recipientEmails,
             subject: subject,
             html: body,
@@ -41,6 +41,98 @@ class MailSender {
 
     }
 }
+
+
+class HTMLReporter {
+
+    static drawKanban(projectName, projectUrl, columns, days_ago, removedIssues) {
+        const today = new Date();
+        const groups = ["No change", "Moved here", "Added", "Reopened", "Closed", "Removed"];
+        return (
+            '<br/><div class="project"><span class="projectname"><a href="' + projectUrl + '">' +
+            projectName +
+            "</a></span><br/> past " +
+            days_ago +
+            " days activity (as at " +
+            today.getDate() +
+            "/" +
+            (today.getMonth() + 1) +
+            "/" +
+            today.getFullYear() +
+            ")" +
+            (removedIssues.length > 0 ? '<div class="removed"><span class="grouphead">Removed issues</span><br/>' +
+                removedIssues.map((issue) => {
+                    return (
+                        `<a title="" href="${issue.html_url}" class="group0">${issue.title}</a>`
+                    );
+                }).join("") + '</div>'
+                : '') +
+            "<table><tr>" +
+            columns
+                .map(function (element) {
+                    return (
+                        '<td><div class="column">' +
+                        element.name +
+                        "</div>" +
+                        (element.issues.length === 0
+                            ? '<div style="text-align:center;">No issues</div>'
+                            : element.issues
+                                .map((issue, i, arr) => {
+                                    return (
+                                        (i > 0 && arr[i - 1].group !== issue.group ? "</div>" : "") +
+                                        (i === 0 || arr[i - 1].group !== issue.group ? '<br/><div class="grouping' + issue.group + '"><div class="grouphead">' + groups[issue.group] + "</div>" : "")
+                                        + '<li><a title="' + issue.flow + '" href="' + issue.html_url + '" class="group' + issue.group + '">' + issue.title + "</a> " +
+                                        (issue.period_comments > 0 ? ' <a class="comments" title="' + issue.period_comments + " of " + issue.total_comments + '" href="' + issue.html_url + '">new comments</a>' : "") + "</li>" + (i === arr.length - 1 ? "</div>" : "")
+                                    );
+                                })
+                                .join("")) +
+                        "</td>"
+                    );
+                })
+                .join("") +
+            "</tr></table>" +
+            "</div><br/>"
+        );
+    }
+
+
+
+    static write(kanbans) {
+        // TODO: can CSS be input?
+        const cssStyle =
+            `<style> 
+                ul {padding: 12px;} 
+                ul li {list-style-type: circle;} 
+                .removed {align: center; width: 100%; padding: 4px; vertical-align: top; text-align:left;}  
+                .project {overflow-x:auto; text-align: center; }  
+                .projectname {font-size:large; font-weight: bold; }  
+                a.comments {color:purple; font-style: italic; font-size: small; font-weight: bold;}  
+                .grouphead  {font-style: italic; text-align: center; } 
+                .grouping0  {background-color: #f0efef;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; } 
+                .grouping1  {background-color: #ddeedd;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; } 
+                .grouping2  {background-color: #c2d4dd;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; } 
+                .grouping3  {background-color: #eaece5;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; } 
+                .grouping4  {background-color: #b2c2bf;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; } 
+                .grouping5  {background-color: #f0efef;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }
+                .column { font-weight: bold; text-align: center;    } 
+                table { width: 100%; padding: 4px; border-spacing: 4px;} 
+                td {background-color: #f0efef; width:150px; padding: 8px; vertical-align: top; text-align:left; border: 1px solid #cccccc;  border-radius: 6px;}  
+            </style>`;
+
+
+        const htmlKanban = kanbans.map(k => this.drawKanban(k));
+
+        return `<html>
+            <head>
+                ${cssStyle}
+            </head>
+            <body>
+                ${htmlKanban}
+            </body>
+        </html>`;
+    }
+}
+
 
 async function run() {
     try {
@@ -355,56 +447,34 @@ async function run() {
                     );
                 }
 
-                projectKanbans.push(
-                    drawKanban(
-                        repo_projects.data[p].name,
-                        repo_projects.data[p].html_url,
-                        kanbanColumns,
-                        daysToQuery,
-                        removed_issues
-                    )
+                projectKanbans.push({
+                    name: repo_projects.data[p].name,
+                    url: repo_projects.data[p].html_url,
+                    columns: kanbanColumns,
+                    days: daysToQuery,
+                    removed: removed_issues
+                }
+
                 );
 
             }
         }
 
-        // TODO: can CSS be input?
-        const cssStyle =
-            "<head><style>" +
-            " ul {padding: 12px;} ul li {list-style-type: circle;}" +
-            " .removed {align: center; width: 100%; padding: 4px; vertical-align: top; text-align:left;} " +
-            " .project {overflow-x:auto; text-align: center; } " +
-            " .projectname {font-size:large; font-weight: bold; } " +
-            " a.comments {color:purple; font-style: italic; font-size: small; font-weight: bold;} " +
-            " .grouphead  {font-style: italic; text-align: center; }" +
-            " .grouping0  {background-color: #f0efef;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
-            " .grouping1  {background-color: #ddeedd;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
-            " .grouping2  {background-color: #c2d4dd;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
-            " .grouping3  {background-color: #eaece5;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
-            " .grouping4  {background-color: #b2c2bf;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" +
-            " .grouping5  {background-color: #f0efef;  border-radius: 6px; border: 1px solid #bbbbbb; padding: 8px; }" + " .column { font-weight: bold; text-align: center;    }" +
-            " table { width: 100%; padding: 4px; border-spacing: 4px;}" +
-            " td {background-color: #f0efef; width:150px; padding: 8px; vertical-align: top; text-align:left; border: 1px solid #cccccc;  border-radius: 6px;} " +
-            " </style></head>";
+        const htmlReport = HTMLReporter.write(projectKanbans);
+
+
 
         // save snapshot as artifact for action run
         const path = "kanban/index.html";
         await makeDir(dirname(path));
-        appendFileSync(
-            path,
-            "<html>" +
-            cssStyle +
-            "<body>" +
-            projectKanbans.join("") +
-            "</body></html>"
-        );
+        appendFileSync(path, htmlReport);
 
+        // send email with report
         // TODO: validate recipients and other email input
         if (recipientEmails.indexOf("@") > -1) {
             const mailer = new MailSender(smtpServer, smtpServerPort, authUser, authPwd);
             const subject = `Project activity ${owner}/${repo} - past ${daysToQuery} days`;
-            const body = cssStyle + projectKanbans.join("");
-            mailer.send(emailFrom, recipientEmails, subject, body);
+            mailer.send(emailFrom, recipientEmails, subject, htmlReport);
         }
 
     } catch (error) {
@@ -412,86 +482,6 @@ async function run() {
     }
 }
 
-
-function drawKanban(projectName, projectUrl, columns, days_ago, removedIssues) {
-    const today = new Date();
-    const groups = ["No change", "Moved here", "Added", "Reopened", "Closed", "Removed"];
-    return (
-        '<br/><div class="project"><span class="projectname"><a href="' + projectUrl + '">' +
-        projectName +
-        "</a></span><br/>" +
-        " past " +
-        days_ago +
-        " days activity (as at " +
-        today.getDate() +
-        "/" +
-        (today.getMonth() + 1) +
-        "/" +
-        today.getFullYear() +
-        ")" +
-        (removedIssues.length > 0 ? '<div class="removed"><span class="grouphead">Removed issues</span><br/>' +
-            removedIssues.map((issue) => {
-                return (
-                    '<a title="" href="' + issue.html_url + '" class="group0">' +
-                    issue.title +
-                    "</a> "
-                );
-            }).join("") + '</div>'
-            : '') +
-        "<table><tr>" +
-        columns
-            .map(function (element) {
-                return (
-                    '<td><div class="column">' +
-                    element.name +
-                    "</div>" +
-                    (element.issues.length === 0
-                        ? '<div style="text-align:center;">No issues</div>'
-                        : element.issues
-                            .map((issue, i, arr) => {
-                                return (
-                                    (i > 0 && arr[i - 1].group !== issue.group
-                                        ? "</div>"
-                                        : "") +
-                                    (i === 0 ||
-                                        arr[i - 1].group !== issue.group
-                                        ? '<br/><div class="grouping' +
-                                        issue.group +
-                                        '"><div class="grouphead">' +
-                                        groups[issue.group] +
-                                        "</div>"
-                                        : "") +
-                                    '<li><a title="' +
-                                    issue.flow +
-                                    '" href="' +
-                                    issue.html_url +
-                                    '" class="group' +
-                                    issue.group +
-                                    '">' +
-                                    issue.title +
-                                    "</a> " +
-                                    (issue.period_comments > 0
-                                        ? ' <a class="comments" title="' +
-                                        issue.period_comments +
-                                        " of " +
-                                        issue.total_comments +
-                                        '" href="' +
-                                        issue.html_url +
-                                        '">new comments</a>'
-                                        : "") +
-                                    "</li>" +
-                                    (i === arr.length - 1 ? "</div>" : "")
-                                );
-                            })
-                            .join("")) +
-                    "</td>"
-                );
-            })
-            .join("") +
-        "</tr></table>" +
-        "</div><br/>"
-    );
-}
 
 run();
 
