@@ -5,6 +5,36 @@ const { dirname } = require("path");
 const { appendFileSync } = require("fs");
 const makeDir = require("make-dir");
 
+class MailSender {
+    constructor(smtpServer, smtpServerPort, authUser, authPwd) {
+        this.smtpServer = smtpServer;
+        this.smtpServerPort = smtpServerPort;
+        this.authUser = authUser;
+        this.authPwd = authPwd;
+    }
+
+    send(emailFrom, recipientEmails, subject, body) {
+
+        let isTLS = false;
+        const transport = nodemailer.createTransport({
+            host: this.smtpServer,
+            port: this.smtpServerPort,
+            secure: isTLS,
+            auth: {
+                user: this.authUser,
+                pass: this.authPwd,
+            },
+        });
+        transport.sendMail({
+            from: emailFrom.match(/.+<.+@.+>/) ?  emailFrom : `"${emailFrom}" <${this.authUser}>`,
+            to: recipientEmails,
+            subject: subject,
+            html: body,
+        });
+
+    }
+}
+
 async function run() {
     try {
         const token = core.getInput("token");
@@ -362,45 +392,19 @@ async function run() {
             "</body></html>"
         );
 
-        // email kanbans
         // TODO: validate recipients and other email input
         if (recipientEmails.indexOf("@") > -1) {
-            let subject =
-                "Project activity " +
-                owner +
-                "/" +
-                repo +
-                " - past " +
-                daysToQuery +
-                " days";
-            let isTLS = false;
-            const transport = nodemailer.createTransport({
-                host: smtpServer,
-                port: smtpServerPort,
-                secure: isTLS,
-                auth: {
-                    user: authUser,
-                    pass: authPwd,
-                },
-            });
-            await transport.sendMail({
-                from: get_from(emailFrom, authUser),
-                to: recipientEmails,
-                subject: subject,
-                html: cssStyle + projectKanbans.join(""),
-            });
+            const mailer = new MailSender(smtpServer, smtpServerPort, authUser, authPwd);
+            const subject = `Project activity ${owner}/${repo} - past ${daysToQuery} days`;
+            const body = cssStyle + projectKanbans.join("");
+            mailer.send(emailFrom, recipientEmails, subject, body);
         }
+
     } catch (error) {
         core.setFailed(error.message);
     }
 }
 
-function get_from(from, username) {
-    if (from.match(/.+<.+@.+>/)) {
-        return from;
-    }
-    return `"${from}" <${username}>`;
-}
 
 function drawKanban(projectName, projectUrl, columns, days_ago, removedIssues) {
     const today = new Date();
