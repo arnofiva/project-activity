@@ -1,31 +1,31 @@
 name: Project Activity
 author: Andy
-description: Generates an email summary of project activity, showing issues that have moved, been added or commented.
+description: Generates a summary of project activity, showing issues that have moved, been added or commented. Optionally it is sent by email.
 inputs:
     token:
         description: "Github Token"
         required: true
     smtp-server:
         description: "SMTP server"
-        required: true
+        required: false
     smtp-server-port:
         description: "SMTP server port"
-        required: true
+        required: false
     auth-user:
         description: "Sender user email"
-        required: true
+        required: false
     auth-pwd:
         description: "Sender user password (for gmail generate and use an app password)"
-        required: true
+        required: false
     email-from:
         description: "Sender from name"
-        required: true
+        required: false
     recipient-emails:
         description: "Recipents email addresses (comma-separated)"
-        required: true
+        required: false
     project-numbers:
         description: "Project Numbers (comma-separated list, or, all)"
-        required: required
+        required: true
     days:
         description: "Days back, from run date, of project activity to summarise"
         required: true
