@@ -1,4 +1,3 @@
-/* eslint-disable max-classes-per-file */
 /* eslint-disable no-await-in-loop */
 
 const core = require('@actions/core');
@@ -6,35 +5,6 @@ const { Octokit } = require('@octokit/rest');
 const { dirname } = require('path');
 const { appendFileSync } = require('fs');
 const makeDir = require('make-dir');
-const nodemailer = require('nodemailer');
-
-class MailSender {
-  constructor(smtpServer, smtpServerPort, authUser, authPwd) {
-    this.smtpServer = smtpServer;
-    this.smtpServerPort = smtpServerPort;
-    this.authUser = authUser;
-    this.authPwd = authPwd;
-  }
-
-  send(emailFrom, recipientEmails, subject, body) {
-    const isTLS = false;
-    const transport = nodemailer.createTransport({
-      host: this.smtpServer,
-      port: this.smtpServerPort,
-      secure: isTLS,
-      auth: {
-        user: this.authUser,
-        pass: this.authPwd,
-      },
-    });
-    transport.sendMail({
-      from: emailFrom.match(/.+<.+@.+>/) ? emailFrom : `"${emailFrom}" <${this.authUser}>`,
-      to: recipientEmails,
-      subject,
-      html: body,
-    });
-  }
-}
 
 class HTMLReporter {
   static drawKanban(projectName, projectUrl, columns, daysAgo, removedIssues) {
@@ -106,13 +76,6 @@ class HTMLReporter {
 async function run() {
   try {
     const token = core.getInput('token');
-    // email inputs
-    const smtpServer = core.getInput('smtp-server');
-    const smtpServerPort = core.getInput('smtp-server-port');
-    const authUser = core.getInput('auth-user'); // secret
-    const authPwd = core.getInput('auth-pwd'); // secret
-    const emailFrom = core.getInput('email-from');
-    const recipientEmails = core.getInput('recipient-emails'); // secret
     // scope of data
     const projectNumbers = core.getInput('project-numbers'); // secret
     const phaseCalendarDays = core.getInput('days'); //
@@ -405,14 +368,6 @@ async function run() {
     }
 
     const htmlReport = HTMLReporter.write(projectKanbans);
-
-    // send email with report
-    // TODO: validate recipients and other email input
-    if (recipientEmails.indexOf('@') > -1) {
-      const mailer = new MailSender(smtpServer, smtpServerPort, authUser, authPwd);
-      const subject = `Project activity ${owner}/${repo} - past ${daysToQuery} days`;
-      mailer.send(emailFrom, recipientEmails, subject, htmlReport);
-    }
 
     // save snapshot as artifact for action run
     const path = 'kanban/index.html';
