@@ -1,3 +1,4 @@
+/* eslint-disable no-else-return */
 /* eslint-disable no-await-in-loop */
 
 const core = require('@actions/core');
@@ -110,6 +111,8 @@ async function run() {
       },
     );
 
+    core.debug(`Retrieved ${repoProjects.data.length} repos.`);
+
     // get repo issues updated in last 30 days
     const since = new Date(new Date().getTime() - (30 * 1000 * 3600 * 24));
     const issuesSince = await octokit.request(
@@ -132,6 +135,8 @@ async function run() {
           issue_number: issuesSince.data[i].number,
         },
       );
+
+      core.debug(`Retrieved ${updateIssueEvents.data.length} events.`);
 
       const removals = updateIssueEvents.data.filter(
         (ev) => (
@@ -179,6 +184,8 @@ async function run() {
           },
         );
 
+        core.debug(`Retrieved ${columns.data.length} columns.`);
+
         // info for summary
         const kanbanColumns = columns.data.map((element) => ({
           name: element.name,
@@ -210,6 +217,8 @@ async function run() {
             },
           );
 
+          core.debug(`Retrieved ${cards.data.length} cards.`);
+
           // iterate cards
           const keys = Object.keys(cards.data);
           keys.forEach(async (columnCard) => {
@@ -222,6 +231,8 @@ async function run() {
                 card_id: cards.data[columnCard].id,
               },
             );
+
+            core.debug(`Retrieved ${card.data.length} card.`);
 
             // TODO: notes (currently ignored)
             if (typeof card.data.content_url === 'string') {
@@ -240,6 +251,8 @@ async function run() {
                   issue_number: issueNumber,
                 },
               );
+
+              core.debug(`Retrieved ${issueEvents.data.length} events2.`);
 
               const eventsSummary = issueEvents.data.map(
                 (ev) => {
@@ -271,45 +284,36 @@ async function run() {
               // 4 - closed
               // 5 - removed_from_project (TODO)
 
-              for (let e = 0; e < eventsSummary.length; e += 1) {
+              eventsSummary.forEach((e) => {
                 // filter out events outside time range
-                if (
-                  Math.abs(eventsSummary[e].daysAgo)
-                  <= daysToQuery
-                  && eventsSummary[e].daysAgo <= 0
-                ) {
-                  relevantEvents.push(eventsSummary[e]);
+                if (Math.abs(e.daysAgo) <= daysToQuery && e.daysAgo <= 0) {
+                  relevantEvents.push(e);
 
                   // most relevant change determines grouping
-                  if (eventsSummary[e].event
-                    === 'moved_columns_in_project' && issueGroup === 0) {
+                  if (e.event === 'moved_columns_in_project' && issueGroup === 0) {
                     issueGroup = 1;
                   }
-                  if (eventsSummary[e].event === 'added_to_project' || eventsSummary[e].event === 'converted_note_to_issue') {
+                  if (e.event === 'added_to_project' || e.event === 'converted_note_to_issue') {
                     issueGroup = 2;
                   }
-                  if (eventsSummary[e].event === 'reopened') {
+                  if (e.event === 'reopened') {
                     issueGroup = 3;
                   }
-                  if (eventsSummary[e].event === 'closed') {
+                  if (e.event === 'closed') {
                     issueGroup = 4;
                   }
                 }
-              }
+              });
 
               // describe flow between now and days ago
-              const flow = relevantEvents
-                .map((ev, i) => (ev.project_card
-                  && ev.project_card.column_name
-                  ? (i === 0
-                    && ev.project_card.previous_column_name
-                    ? `${ev.project_card
-                      .previous_column_name
-                    } -> `
-                    : '')
-                  + ev.project_card.column_name
-                  : ev.event))
-                .join(' -> ');
+              const flowEvents = relevantEvents.map((ev, i) => {
+                if (ev.project_card && ev.project_card.column_name) {
+                  return (i === 0 && ev.project_card.previous_column_name ? `${ev.project_card.previous_column_name} -> ` : '') + ev.project_card.column_name;
+                } else {
+                  return ev.event;
+                }
+              });
+              const flow = flowEvents.join(' -> ');
 
               // get issue details (for title and html url)
               const issue = await octokit.request(
