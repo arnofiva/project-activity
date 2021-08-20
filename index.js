@@ -1,99 +1,77 @@
-const core = require("@actions/core");
-const { Octokit } = require("@octokit/rest");
-const nodemailer = require("nodemailer");
-const { dirname } = require("path");
-const { appendFileSync } = require("fs");
-const makeDir = require("make-dir");
+/* eslint-disable max-classes-per-file */
+/* eslint-disable no-await-in-loop */
+
+const core = require('@actions/core');
+const { Octokit } = require('@octokit/rest');
+const { dirname } = require('path');
+const { appendFileSync } = require('fs');
+const makeDir = require('make-dir');
+const nodemailer = require('nodemailer');
 
 class MailSender {
-    constructor(smtpServer, smtpServerPort, authUser, authPwd) {
-        this.smtpServer = smtpServer;
-        this.smtpServerPort = smtpServerPort;
-        this.authUser = authUser;
-        this.authPwd = authPwd;
-    }
+  constructor(smtpServer, smtpServerPort, authUser, authPwd) {
+    this.smtpServer = smtpServer;
+    this.smtpServerPort = smtpServerPort;
+    this.authUser = authUser;
+    this.authPwd = authPwd;
+  }
 
-    send(emailFrom, recipientEmails, subject, body) {
-
-        let isTLS = false;
-        const transport = nodemailer.createTransport({
-            host: this.smtpServer,
-            port: this.smtpServerPort,
-            secure: isTLS,
-            auth: {
-                user: this.authUser,
-                pass: this.authPwd,
-            },
-        });
-        transport.sendMail({
-            from: emailFrom.match(/.+<.+@.+>/) ? emailFrom : `"${emailFrom}" <${this.authUser}>`,
-            to: recipientEmails,
-            subject: subject,
-            html: body,
-        });
-
-    }
+  send(emailFrom, recipientEmails, subject, body) {
+    const isTLS = false;
+    const transport = nodemailer.createTransport({
+      host: this.smtpServer,
+      port: this.smtpServerPort,
+      secure: isTLS,
+      auth: {
+        user: this.authUser,
+        pass: this.authPwd,
+      },
+    });
+    transport.sendMail({
+      from: emailFrom.match(/.+<.+@.+>/) ? emailFrom : `"${emailFrom}" <${this.authUser}>`,
+      to: recipientEmails,
+      subject,
+      html: body,
+    });
+  }
 }
 
-
 class HTMLReporter {
+  static drawKanban(projectName, projectUrl, columns, daysAgo, removedIssues) {
+    const today = new Date();
+    const groups = ['No change', 'Moved here', 'Added', 'Reopened', 'Closed', 'Removed'];
+    return (
+      `<br/>
+      <div class="project"><span class="projectname">
+        <a href="${projectUrl}">${projectName}</a>
+        </span>
+        <br/> past ${daysAgo} days activity (as at ${today.getDate()}/${today.getMonth() + 1}/${today.getFullYear()})${removedIssues.length > 0 ? `<div class="removed"><span class="grouphead">Removed issues</span><br/>${removedIssues.map((issue) => (
+        `<a title="" href="${issue.html_url}" class="group0">${issue.title}</a>`
+      )).join('')}</div>`
+        : ''
+      }<table><tr>${columns
+        .map((element) => (
+          `<td><div class="column">${element.name
+          }</div>${element.issues.length === 0
+            ? '<div style="text-align:center;">No issues</div>'
+            : element.issues
+              .map((issue, i, arr) => (
+                `${(i > 0 && arr[i - 1].group !== issue.group ? '</div>' : '')
+                + (i === 0 || arr[i - 1].group !== issue.group ? `<br/><div class="grouping${issue.group}"><div class="grouphead">${groups[issue.group]}</div>` : '')
+                }<li><a title="${issue.flow}" href="${issue.html_url}" class="group${issue.group}">${issue.title}</a> ${issue.periodComments > 0 ? ` <a class="comments" title="${issue.periodComments} of ${issue.totalComments}" href="${issue.html_url}">new comments</a>` : ''}</li>${i === arr.length - 1 ? '</div>' : ''}`
+              ))
+              .join('')
+          }</td>`
+        ))
+        .join('')
+      }</tr></table>`
+      + '</div><br/>'
+    );
+  }
 
-    static drawKanban(projectName, projectUrl, columns, days_ago, removedIssues) {
-        const today = new Date();
-        const groups = ["No change", "Moved here", "Added", "Reopened", "Closed", "Removed"];
-        return (
-            '<br/><div class="project"><span class="projectname"><a href="' + projectUrl + '">' +
-            projectName +
-            "</a></span><br/> past " +
-            days_ago +
-            " days activity (as at " +
-            today.getDate() +
-            "/" +
-            (today.getMonth() + 1) +
-            "/" +
-            today.getFullYear() +
-            ")" +
-            (removedIssues.length > 0 ? '<div class="removed"><span class="grouphead">Removed issues</span><br/>' +
-                removedIssues.map((issue) => {
-                    return (
-                        `<a title="" href="${issue.html_url}" class="group0">${issue.title}</a>`
-                    );
-                }).join("") + '</div>'
-                : '') +
-            "<table><tr>" +
-            columns
-                .map(function (element) {
-                    return (
-                        '<td><div class="column">' +
-                        element.name +
-                        "</div>" +
-                        (element.issues.length === 0
-                            ? '<div style="text-align:center;">No issues</div>'
-                            : element.issues
-                                .map((issue, i, arr) => {
-                                    return (
-                                        (i > 0 && arr[i - 1].group !== issue.group ? "</div>" : "") +
-                                        (i === 0 || arr[i - 1].group !== issue.group ? '<br/><div class="grouping' + issue.group + '"><div class="grouphead">' + groups[issue.group] + "</div>" : "")
-                                        + '<li><a title="' + issue.flow + '" href="' + issue.html_url + '" class="group' + issue.group + '">' + issue.title + "</a> " +
-                                        (issue.period_comments > 0 ? ' <a class="comments" title="' + issue.period_comments + " of " + issue.total_comments + '" href="' + issue.html_url + '">new comments</a>' : "") + "</li>" + (i === arr.length - 1 ? "</div>" : "")
-                                    );
-                                })
-                                .join("")) +
-                        "</td>"
-                    );
-                })
-                .join("") +
-            "</tr></table>" +
-            "</div><br/>"
-        );
-    }
-
-
-
-    static write(kanbans) {
-        // TODO: can CSS be input?
-        const cssStyle =
-            `<style> 
+  static write(kanbans) {
+    // TODO: can CSS be input?
+    const cssStyle = `<style> 
                 ul {padding: 12px;} 
                 ul li {list-style-type: circle;} 
                 .removed {align: center; width: 100%; padding: 4px; vertical-align: top; text-align:left;}  
@@ -112,10 +90,9 @@ class HTMLReporter {
                 td {background-color: #f0efef; width:150px; padding: 8px; vertical-align: top; text-align:left; border: 1px solid #cccccc;  border-radius: 6px;}  
             </style>`;
 
+    const htmlKanban = kanbans.map((k) => this.drawKanban(k));
 
-        const htmlKanban = kanbans.map(k => this.drawKanban(k));
-
-        return `<html>
+    return `<html>
             <head>
                 ${cssStyle}
             </head>
@@ -123,357 +100,327 @@ class HTMLReporter {
                 ${htmlKanban}
             </body>
         </html>`;
-    }
+  }
 }
-
 
 async function run() {
-    try {
-        const token = core.getInput("token");
-        // email inputs
-        const smtpServer = core.getInput("smtp-server");
-        const smtpServerPort = core.getInput("smtp-server-port");
-        const authUser = core.getInput("auth-user"); // secret
-        const authPwd = core.getInput("auth-pwd"); // secret
-        const emailFrom = core.getInput("email-from");
-        const recipientEmails = core.getInput("recipient-emails"); // secret
-        // scope of data
-        const projectNumbers = core.getInput("project-numbers"); // secret
-        // const phaseEndDate = core.getInput("phase-end-date"); //
-        const phaseCalendarDays = core.getInput("days"); //
+  try {
+    const token = core.getInput('token');
+    // email inputs
+    const smtpServer = core.getInput('smtp-server');
+    const smtpServerPort = core.getInput('smtp-server-port');
+    const authUser = core.getInput('auth-user'); // secret
+    const authPwd = core.getInput('auth-pwd'); // secret
+    const emailFrom = core.getInput('email-from');
+    const recipientEmails = core.getInput('recipient-emails'); // secret
+    // scope of data
+    const projectNumbers = core.getInput('project-numbers'); // secret
+    const phaseCalendarDays = core.getInput('days'); //
 
-        let projectsToQuery = [];
+    let projectsToQuery = [];
 
-        if (projectNumbers.toLowerCase() !== "all") {
-            try {
-                projectsToQuery = projectNumbers.split(",");
-            } catch (error) {
-                // invalid project number list
-            }
-        }
+    if (projectNumbers.toLowerCase() !== 'all') {
+      try {
+        projectsToQuery = projectNumbers.split(',');
+      } catch (error) {
+        // invalid project number list
+      }
+    }
 
-        let daysToQuery = 7;
-        if (!isNaN(phaseCalendarDays)) {
-            daysToQuery = parseInt(phaseCalendarDays);
-        }
+    let daysToQuery = 7;
+    if (!Number.isNaN(phaseCalendarDays)) {
+      daysToQuery = parseInt(phaseCalendarDays, 10);
+    }
 
-        const octokit = new Octokit({
-            auth: token,
-            previews: ["starfox-preview", "inertia-preview"],
-        });
-        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
+    const octokit = new Octokit({
+      auth: token,
+      previews: ['starfox-preview', 'inertia-preview'],
+    });
+    const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
 
-        // get open projects in repo
-        const repo_projects = await octokit.request(
-            "GET /repos/:owner/:repo/projects",
-            {
-                owner,
-                repo,
-            }
+    // get open projects in repo
+    const repoProjects = await octokit.request(
+      'GET /repos/:owner/:repo/projects',
+      {
+        owner,
+        repo,
+      },
+    );
+
+    // get repo issues updated in last 30 days
+    const since = new Date(new Date().getTime() - (30 * 1000 * 3600 * 24));
+    const issuesSince = await octokit.request(
+      'GET /repos/{owner}/{repo}/issues',
+      {
+        owner,
+        repo,
+        since,
+      },
+    );
+
+    // for issues updated in last 30 days, get removals and additions to projects
+    const removeEvents = [];
+    for (let i = 0; i < issuesSince.data.length; i += 1) {
+      const updateIssueEvents = await octokit.request(
+        'GET /repos/{owner}/{repo}/issues/:issue_number/events',
+        {
+          owner,
+          repo,
+          issue_number: issuesSince.data[i].number,
+        },
+      );
+
+      const removals = updateIssueEvents.data.filter(
+        (ev) => (
+          (ev.event === 'removed_from_project' || ev.event === 'added_to_project')
+        ),
+      );
+
+      // sort date ascending
+      removals.sort((a, b) => (a.created_at > b.created_at ? 1 : -1));
+
+      // save relevant events for issue
+      const keys = Object.keys(removals);
+      keys.forEach((key) => {
+        removeEvents.push(
+          {
+            issue_number: issuesSince.data[i].number,
+            event: removals[key].event,
+            created_at: removals[key].created_at,
+            html_url: issuesSince.data[i].html_url,
+            title: issuesSince.data[i].title,
+            project_id: removals[key].project_card.project_id,
+          },
+        );
+      });
+    }
+
+    // iterate projects in repo
+    const projectKanbans = [];
+    for (let p = 0; p < repoProjects.data.length; p += 1) {
+      if (
+        projectsToQuery.length === 0
+        || projectsToQuery.toLowerCase() === 'all'
+        || projectsToQuery.indexOf(
+          repoProjects.data[p].number.toString(),
+        ) > -1
+      ) {
+        // get columns for project
+        const projectId = repoProjects.data[p].id;
+        const columns = await octokit.request(
+          'GET /projects/:project_id/columns',
+          {
+            owner,
+            repo,
+            project_id: repoProjects.data[p].id,
+          },
         );
 
-        // get repo issues updated in last 30 days
-        const since = new Date(new Date().getTime() - (30 * 1000 * 3600 * 24));
-        const issues_since = await octokit.request(
-            'GET /repos/{owner}/{repo}/issues',
+        // info for summary
+        const kanbanColumns = columns.data.map((element) => ({
+          name: element.name,
+          issues: [],
+        }));
+
+        // removed issues - filter out those that were subsequently added back
+        const removedIssues = removeEvents.filter((ev, i, array) => {
+          if (ev.event.toString() === 'removed_from_project' && ev.project_id === projectId) {
+            for (let subsequent = i + 1; subsequent < array.length; subsequent += 1) {
+              if (array[subsequent].issue_number.toString() === ev.issue_number.toString() && array[subsequent].event === 'added_to_project') {
+                return false; // ignore removals that were added back
+              }
+            }
+            return true; // keep removals not re-added
+          }
+          return false; // ignore adds
+        });
+
+        // iterate columns
+        for (let col = 0; col < columns.data.length; col += 1) {
+          // get cards for column
+          const cards = await octokit.request(
+            'GET /projects/columns/:column_id/cards',
             {
+              owner,
+              repo,
+              column_id: columns.data[col].id,
+            },
+          );
+
+          // iterate cards
+          const keys = Object.keys(cards.data);
+          keys.forEach(async (columnCard) => {
+            // get card details
+            const card = await octokit.request(
+              'GET /projects/columns/cards/:card_id',
+              {
                 owner,
                 repo,
-                since: since
-            });
+                card_id: cards.data[columnCard].id,
+              },
+            );
 
-        // for issues updated in last 30 days, get removals and additions to projects
-        const remove_events = [];
-        for (let i = 0; i < issues_since.data.length; i++) {
+            // TODO: notes (currently ignored)
+            if (typeof card.data.content_url === 'string') {
+              // determine issue number
+              const contentUrlParts = card.data.content_url.split(
+                '/',
+              );
+              const issueNumber = contentUrlParts[contentUrlParts.length - 1];
 
-            const update_issue_events = await octokit.request(
-                "GET /repos/{owner}/{repo}/issues/:issue_number/events",
+              // GET REPO EVENTS
+              const issueEvents = await octokit.request(
+                'GET /repos/:owner/:repo/issues/:issue_number/events',
                 {
-                    owner,
-                    repo,
-                    issue_number: issues_since.data[i].number,
-                }
-            );
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                },
+              );
 
-            const removals = update_issue_events.data.filter(
+              const eventsSummary = issueEvents.data.map(
                 (ev) => {
-                    return (
-                        (ev.event === "removed_from_project" || ev.event === "added_to_project")
-                    )
+                  const timeDiff = new Date(ev.created_at).getTime()
+                    - new Date().getTime();
+                  const dayDiff = Math.round(
+                    timeDiff / (1000 * 3600 * 24),
+                  );
+                  return {
+                    event: ev.event,
+                    daysAgo: dayDiff,
+                    project_card: ev.project_card,
+                    time_diff: timeDiff,
+                  };
+                },
+              );
+
+              // sort by time
+              eventsSummary.sort((a, b) => (a.time_diff > b.time_diff ? 1 : -1));
+
+              // filter on time period
+              const relevantEvents = [];
+
+              let issueGroup = 0;
+              // 0 - no change
+              // 1 - moved_columns_in_project
+              // 2 - added_to_project, converted_note_to_issue
+              // 3 - reopened
+              // 4 - closed
+              // 5 - removed_from_project (TODO)
+
+              for (let e = 0; e < eventsSummary.length; e += 1) {
+                // filter out events outside time range
+                if (
+                  Math.abs(eventsSummary[e].daysAgo)
+                  <= daysToQuery
+                  && eventsSummary[e].daysAgo <= 0
+                ) {
+                  relevantEvents.push(eventsSummary[e]);
+
+                  // most relevant change determines grouping
+                  if (eventsSummary[e].event
+                    === 'moved_columns_in_project' && issueGroup === 0) {
+                    issueGroup = 1;
+                  }
+                  if (eventsSummary[e].event === 'added_to_project' || eventsSummary[e].event === 'converted_note_to_issue') {
+                    issueGroup = 2;
+                  }
+                  if (eventsSummary[e].event === 'reopened') {
+                    issueGroup = 3;
+                  }
+                  if (eventsSummary[e].event === 'closed') {
+                    issueGroup = 4;
+                  }
                 }
-            );
+              }
 
-            // sort date ascending
-            removals.sort((a, b) =>
-                a.created_at > b.created_at ? 1 : -1
-            );
+              // describe flow between now and days ago
+              const flow = relevantEvents
+                .map((ev, i) => (ev.project_card
+                  && ev.project_card.column_name
+                  ? (i === 0
+                    && ev.project_card.previous_column_name
+                    ? `${ev.project_card
+                      .previous_column_name
+                    } -> `
+                    : '')
+                  + ev.project_card.column_name
+                  : ev.event))
+                .join(' -> ');
 
-            // save relevant events for issue
-            for (const remove_ev in removals) {
-                remove_events.push(
-                    {
-                        "issue_number": issues_since.data[i].number,
-                        "event": removals[remove_ev].event,
-                        "created_at": removals[remove_ev].created_at,
-                        "html_url": issues_since.data[i].html_url,
-                        "title": issues_since.data[i].title,
-                        "project_id": removals[remove_ev].project_card.project_id
-                    }
-                );
+              // get issue details (for title and html url)
+              const issue = await octokit.request(
+                'GET /repos/:owner/:repo/issues/:issue_number',
+                {
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                },
+              );
+
+              const issueComments = await octokit.request(
+                '/repos/:owner/:repo/issues/:issue_number/comments',
+                {
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                },
+              );
+
+              const totalComments = issueComments.data.length;
+              const periodComments = issueComments.data.filter(
+                (comment) => {
+                  const timeDiff = new Date(comment.created_at).getTime() - new Date().getTime();
+                  const dayDiff = Math.round(timeDiff / (1000 * 3600 * 24));
+                  return (Math.abs(dayDiff) <= daysToQuery);
+                },
+              ).length;
+
+              // store card for email content
+              kanbanColumns[col].issues.push({
+                id: issueNumber,
+                html_url: issue.data.html_url,
+                title: issue.data.title,
+                group: issueGroup,
+                flow,
+                totalComments,
+                periodComments,
+              });
+            } else {
+              console.log('ignoring note');
             }
-
+          });
+          // sort by group (0-unchanged, 1-moved, 2-added)
+          kanbanColumns[col].issues.sort((a, b) => (a.group > b.group ? 1 : -1));
         }
 
-        // iterate projects in repo
-        const projectKanbans = [];
-        for (let p = 0; p < repo_projects.data.length; p++) {
-            if (
-                projectsToQuery.length === 0 ||
-                projectsToQuery.toLowerCase() === "all" ||
-                projectsToQuery.indexOf(
-                    repo_projects.data[p].number.toString()
-                ) > -1
-            ) {
-                // get columns for project
-                const project_id = repo_projects.data[p].id;
-                const columns = await octokit.request(
-                    "GET /projects/:project_id/columns",
-                    {
-                        owner,
-                        repo,
-                        project_id: repo_projects.data[p].id,
-                    }
-                );
-
-                // info for summary
-                const kanbanColumns = columns.data.map(function (element) {
-                    return {
-                        name: element.name,
-                        issues: [],
-                    };
-                });
-
-                // removed issues - filter out those that were subsequently added back
-                const removed_issues = remove_events.filter((ev, i, array) => {
-                    if (ev.event.toString() === 'removed_from_project' && ev.project_id === project_id) {
-                        for (let subsequent = i + 1; subsequent < array.length; subsequent++) {
-                            if (array[subsequent].issue_number.toString() === ev.issue_number.toString() && array[subsequent].event === "added_to_project") {
-                                return false; // ignore removals that were added back
-                            }
-                        }
-                        return true; // keep removals not re-added
-                    } else {
-                        return false; // ignore adds
-                    }
-                });
-
-                // iterate columns
-                for (let col = 0; col < columns.data.length; col++) {
-                    // get cards for column
-                    const cards = await octokit.request(
-                        "GET /projects/columns/:column_id/cards",
-                        {
-                            owner,
-                            repo,
-                            column_id: columns.data[col].id,
-                        }
-                    );
-
-                    // iterate cards
-                    for (const columnCard in cards.data) {
-                        // get card details
-                        const card = await octokit.request(
-                            "GET /projects/columns/cards/:card_id",
-                            {
-                                owner,
-                                repo,
-                                card_id: cards.data[columnCard].id,
-                            }
-                        );
-
-                        // TODO: notes (currently ignored)
-                        if (typeof card.data.content_url === "string") {
-                            // determine issue number
-                            const contentUrlParts = card.data.content_url.split(
-                                "/"
-                            );
-                            const issue_number =
-                                contentUrlParts[contentUrlParts.length - 1];
-
-                            // GET REPO EVENTS
-                            const issue_events = await octokit.request(
-                                "GET /repos/:owner/:repo/issues/:issue_number/events",
-                                {
-                                    owner,
-                                    repo,
-                                    issue_number,
-                                }
-                            );
-
-                            const events_summary = issue_events.data.map(
-                                (ev) => {
-                                    const Difference_In_Time =
-                                        new Date(ev.created_at).getTime() -
-                                        new Date().getTime();
-                                    const Difference_In_Days = Math.round(
-                                        Difference_In_Time / (1000 * 3600 * 24)
-                                    );
-                                    return {
-                                        event: ev.event,
-                                        days_ago: Difference_In_Days,
-                                        project_card: ev.project_card,
-                                        time_diff: Difference_In_Time,
-                                    };
-                                }
-                            );
-
-                            // sort by time
-                            events_summary.sort((a, b) =>
-                                a.time_diff > b.time_diff ? 1 : -1
-                            );
-
-                            // filter on time period
-                            const relevant_events = [];
-
-                            let issueGroup = 0;
-                            // 0 - no change
-                            // 1 - moved_columns_in_project
-                            // 2 - added_to_project, converted_note_to_issue
-                            // 3 - reopened
-                            // 4 - closed
-                            // 5 - removed_from_project (TODO)
-
-                            for (let e = 0; e < events_summary.length; e++) {
-                                // filter out events outside time range
-                                if (
-                                    Math.abs(events_summary[e].days_ago) <=
-                                    daysToQuery &&
-                                    events_summary[e].days_ago <= 0
-                                ) {
-                                    relevant_events.push(events_summary[e]);
-
-                                    // most relevant change determines grouping
-                                    if (events_summary[e].event ===
-                                        "moved_columns_in_project" && issueGroup === 0) {
-                                        issueGroup = 1;
-                                    }
-                                    if (events_summary[e].event === "added_to_project" || events_summary[e].event === "converted_note_to_issue") {
-                                        issueGroup = 2;
-                                    }
-                                    if (events_summary[e].event === "reopened") {
-                                        issueGroup = 3;
-                                    }
-                                    if (events_summary[e].event === "closed") {
-                                        issueGroup = 4;
-                                    }
-                                }
-                            }
-
-                            // describe flow between now and days ago
-                            const flow = relevant_events
-                                .map((ev, i) => {
-                                    return ev.project_card &&
-                                        ev.project_card.column_name
-                                        ? (i == 0 &&
-                                            ev.project_card.previous_column_name
-                                            ? ev.project_card
-                                                .previous_column_name +
-                                            " -> "
-                                            : "") +
-                                        ev.project_card.column_name
-                                        : ev.event;
-                                })
-                                .join(" -> ");
-
-                            // get issue details (for title and html url)
-                            const issue = await octokit.request(
-                                "GET /repos/:owner/:repo/issues/:issue_number",
-                                {
-                                    owner,
-                                    repo,
-                                    issue_number,
-                                }
-                            );
-
-                            const issue_comments = await octokit.request(
-                                "/repos/:owner/:repo/issues/:issue_number/comments",
-                                {
-                                    owner,
-                                    repo,
-                                    issue_number,
-                                }
-                            );
-
-                            const total_comments = issue_comments.data.length;
-                            const period_comments = issue_comments.data.filter(
-                                function (comment) {
-                                    const Difference_In_Time =
-                                        new Date(comment.created_at).getTime() -
-                                        new Date().getTime();
-                                    const Difference_In_Days = Math.round(
-                                        Difference_In_Time / (1000 * 3600 * 24)
-                                    );
-                                    return (
-                                        Math.abs(Difference_In_Days) <=
-                                        daysToQuery
-                                    );
-                                }
-                            ).length;
-
-                            // store card for email content
-                            kanbanColumns[col].issues.push({
-                                id: issue_number,
-                                html_url: issue.data.html_url,
-                                title: issue.data.title,
-                                group: issueGroup,
-                                flow: flow,
-                                total_comments: total_comments,
-                                period_comments: period_comments,
-                            });
-                        } else {
-                            console.log("ignoring note");
-                        }
-                    }
-                    // sort by group (0-unchanged, 1-moved, 2-added)
-                    kanbanColumns[col].issues.sort((a, b) =>
-                        a.group > b.group ? 1 : -1
-                    );
-                }
-
-                projectKanbans.push({
-                    name: repo_projects.data[p].name,
-                    url: repo_projects.data[p].html_url,
-                    columns: kanbanColumns,
-                    days: daysToQuery,
-                    removed: removed_issues
-                }
-
-                );
-
-            }
-        }
-
-        const htmlReport = HTMLReporter.write(projectKanbans);
-
-
-
-        // save snapshot as artifact for action run
-        const path = "kanban/index.html";
-        await makeDir(dirname(path));
-        appendFileSync(path, htmlReport);
-
-        // send email with report
-        // TODO: validate recipients and other email input
-        if (recipientEmails.indexOf("@") > -1) {
-            const mailer = new MailSender(smtpServer, smtpServerPort, authUser, authPwd);
-            const subject = `Project activity ${owner}/${repo} - past ${daysToQuery} days`;
-            mailer.send(emailFrom, recipientEmails, subject, htmlReport);
-        }
-
-    } catch (error) {
-        core.setFailed(error.message);
+        projectKanbans.push({
+          name: repoProjects.data[p].name,
+          url: repoProjects.data[p].html_url,
+          columns: kanbanColumns,
+          days: daysToQuery,
+          removed: removedIssues,
+        });
+      }
     }
-}
 
+    const htmlReport = HTMLReporter.write(projectKanbans);
+
+    // send email with report
+    // TODO: validate recipients and other email input
+    if (recipientEmails.indexOf('@') > -1) {
+      const mailer = new MailSender(smtpServer, smtpServerPort, authUser, authPwd);
+      const subject = `Project activity ${owner}/${repo} - past ${daysToQuery} days`;
+      mailer.send(emailFrom, recipientEmails, subject, htmlReport);
+    }
+
+    // save snapshot as artifact for action run
+    const path = 'kanban/index.html';
+    await makeDir(dirname(path));
+    appendFileSync(path, htmlReport);
+  } catch (error) {
+    core.setFailed(error.message);
+  }
+}
 
 run();
