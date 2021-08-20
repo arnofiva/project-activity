@@ -82,311 +82,308 @@ class HTMLReporter {
 }
 
 async function run() {
-  try {
-    const token = core.getInput('token');
-    // scope of data
-    const projectNumbers = core.getInput('project-numbers'); // secret
-    const phaseCalendarDays = core.getInput('days'); //
+  core.debug('Init run().');
+  const token = core.getInput('token');
+  // scope of data
+  const projectNumbers = core.getInput('project-numbers'); // secret
+  const phaseCalendarDays = core.getInput('days'); //
 
-    let projectsToQuery = [];
+  let projectsToQuery = [];
 
-    if (projectNumbers.toLowerCase() !== 'all') {
-      try {
-        projectsToQuery = projectNumbers.split(',');
-      } catch (error) {
-        // invalid project number list
-      }
+  if (projectNumbers.toLowerCase() !== 'all') {
+    try {
+      projectsToQuery = projectNumbers.split(',');
+    } catch (error) {
+      // invalid project number list
     }
+  }
 
-    let daysToQuery = 7;
-    if (!Number.isNaN(phaseCalendarDays)) {
-      daysToQuery = parseInt(phaseCalendarDays, 10);
-    }
+  let daysToQuery = 7;
+  if (!Number.isNaN(phaseCalendarDays)) {
+    daysToQuery = parseInt(phaseCalendarDays, 10);
+  }
 
-    const octokit = new Octokit({
-      auth: token,
-      previews: ['starfox-preview', 'inertia-preview'],
+  const octokit = new Octokit({
+    auth: token,
+    previews: ['starfox-preview', 'inertia-preview'],
+  });
+  const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+
+  // get open projects in repo
+  const repoProjects = await octokit.request(
+    'GET /repos/:owner/:repo/projects',
+    {
+      owner,
+      repo,
+    },
+  );
+
+  core.debug(`Retrieved ${repoProjects.data.length} repos.`);
+
+  // get repo issues updated in last 30 days
+  const since = new Date(new Date().getTime() - (30 * 1000 * 3600 * 24));
+  const issuesSince = await octokit.request(
+    'GET /repos/{owner}/{repo}/issues',
+    {
+      owner,
+      repo,
+      since,
+    },
+  );
+
+  // for issues updated in last 30 days, get removals and additions to projects
+  const removeEvents = [];
+  for (let i = 0; i < issuesSince.data.length; i += 1) {
+    const updateIssueEvents = await octokit.request(
+      'GET /repos/{owner}/{repo}/issues/:issue_number/events',
+      {
+        owner,
+        repo,
+        issue_number: issuesSince.data[i].number,
+      },
+    );
+
+    core.debug(`Retrieved ${updateIssueEvents.data.length} events.`);
+
+    const removals = updateIssueEvents.data.filter(
+      (ev) => (
+        (ev.event === 'removed_from_project' || ev.event === 'added_to_project')
+      ),
+    );
+
+    // sort date ascending
+    removals.sort((a, b) => (a.created_at > b.created_at ? 1 : -1));
+
+    // save relevant events for issue
+    const keys = Object.keys(removals);
+    keys.forEach((key) => {
+      removeEvents.push(
+        {
+          issue_number: issuesSince.data[i].number,
+          event: removals[key].event,
+          created_at: removals[key].created_at,
+          html_url: issuesSince.data[i].html_url,
+          title: issuesSince.data[i].title,
+          project_id: removals[key].project_card.project_id,
+        },
+      );
     });
-    const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+  }
 
-    // get open projects in repo
-    const repoProjects = await octokit.request(
-      'GET /repos/:owner/:repo/projects',
-      {
-        owner,
-        repo,
-      },
-    );
-
-    core.debug(`Retrieved ${repoProjects.data.length} repos.`);
-
-    // get repo issues updated in last 30 days
-    const since = new Date(new Date().getTime() - (30 * 1000 * 3600 * 24));
-    const issuesSince = await octokit.request(
-      'GET /repos/{owner}/{repo}/issues',
-      {
-        owner,
-        repo,
-        since,
-      },
-    );
-
-    // for issues updated in last 30 days, get removals and additions to projects
-    const removeEvents = [];
-    for (let i = 0; i < issuesSince.data.length; i += 1) {
-      const updateIssueEvents = await octokit.request(
-        'GET /repos/{owner}/{repo}/issues/:issue_number/events',
+  // iterate projects in repo
+  const projectKanbans = [];
+  for (let p = 0; p < repoProjects.data.length; p += 1) {
+    if (
+      projectsToQuery.length === 0
+      || projectsToQuery.toLowerCase() === 'all'
+      || projectsToQuery.indexOf(
+        repoProjects.data[p].number.toString(),
+      ) > -1
+    ) {
+      // get columns for project
+      const projectId = repoProjects.data[p].id;
+      const columns = await octokit.request(
+        'GET /projects/:project_id/columns',
         {
           owner,
           repo,
-          issue_number: issuesSince.data[i].number,
+          project_id: repoProjects.data[p].id,
         },
       );
 
-      core.debug(`Retrieved ${updateIssueEvents.data.length} events.`);
+      core.debug(`Retrieved ${columns.data.length} columns.`);
 
-      const removals = updateIssueEvents.data.filter(
-        (ev) => (
-          (ev.event === 'removed_from_project' || ev.event === 'added_to_project')
-        ),
-      );
+      // info for summary
+      const kanbanColumns = columns.data.map((element) => ({
+        name: element.name,
+        issues: [],
+      }));
 
-      // sort date ascending
-      removals.sort((a, b) => (a.created_at > b.created_at ? 1 : -1));
-
-      // save relevant events for issue
-      const keys = Object.keys(removals);
-      keys.forEach((key) => {
-        removeEvents.push(
-          {
-            issue_number: issuesSince.data[i].number,
-            event: removals[key].event,
-            created_at: removals[key].created_at,
-            html_url: issuesSince.data[i].html_url,
-            title: issuesSince.data[i].title,
-            project_id: removals[key].project_card.project_id,
-          },
-        );
+      // removed issues - filter out those that were subsequently added back
+      const removedIssues = removeEvents.filter((ev, i, array) => {
+        if (ev.event.toString() === 'removed_from_project' && ev.project_id === projectId) {
+          for (let subsequent = i + 1; subsequent < array.length; subsequent += 1) {
+            if (array[subsequent].issue_number.toString() === ev.issue_number.toString() && array[subsequent].event === 'added_to_project') {
+              return false; // ignore removals that were added back
+            }
+          }
+          return true; // keep removals not re-added
+        }
+        return false; // ignore adds
       });
-    }
 
-    // iterate projects in repo
-    const projectKanbans = [];
-    for (let p = 0; p < repoProjects.data.length; p += 1) {
-      if (
-        projectsToQuery.length === 0
-        || projectsToQuery.toLowerCase() === 'all'
-        || projectsToQuery.indexOf(
-          repoProjects.data[p].number.toString(),
-        ) > -1
-      ) {
-        // get columns for project
-        const projectId = repoProjects.data[p].id;
-        const columns = await octokit.request(
-          'GET /projects/:project_id/columns',
+      // iterate columns
+      for (let col = 0; col < columns.data.length; col += 1) {
+        // get cards for column
+        const cards = await octokit.request(
+          'GET /projects/columns/:column_id/cards',
           {
             owner,
             repo,
-            project_id: repoProjects.data[p].id,
+            column_id: columns.data[col].id,
           },
         );
 
-        core.debug(`Retrieved ${columns.data.length} columns.`);
+        core.debug(`Retrieved ${cards.data.length} cards.`);
 
-        // info for summary
-        const kanbanColumns = columns.data.map((element) => ({
-          name: element.name,
-          issues: [],
-        }));
-
-        // removed issues - filter out those that were subsequently added back
-        const removedIssues = removeEvents.filter((ev, i, array) => {
-          if (ev.event.toString() === 'removed_from_project' && ev.project_id === projectId) {
-            for (let subsequent = i + 1; subsequent < array.length; subsequent += 1) {
-              if (array[subsequent].issue_number.toString() === ev.issue_number.toString() && array[subsequent].event === 'added_to_project') {
-                return false; // ignore removals that were added back
-              }
-            }
-            return true; // keep removals not re-added
-          }
-          return false; // ignore adds
-        });
-
-        // iterate columns
-        for (let col = 0; col < columns.data.length; col += 1) {
-          // get cards for column
-          const cards = await octokit.request(
-            'GET /projects/columns/:column_id/cards',
+        // iterate cards
+        const keys = Object.keys(cards.data);
+        keys.forEach(async (columnCard) => {
+          // get card details
+          const card = await octokit.request(
+            'GET /projects/columns/cards/:card_id',
             {
               owner,
               repo,
-              column_id: columns.data[col].id,
+              card_id: cards.data[columnCard].id,
             },
           );
 
-          core.debug(`Retrieved ${cards.data.length} cards.`);
+          core.debug(`Retrieved ${card.data.length} card.`);
 
-          // iterate cards
-          const keys = Object.keys(cards.data);
-          keys.forEach(async (columnCard) => {
-            // get card details
-            const card = await octokit.request(
-              'GET /projects/columns/cards/:card_id',
+          // TODO: notes (currently ignored)
+          if (typeof card.data.content_url === 'string') {
+            // determine issue number
+            const contentUrlParts = card.data.content_url.split(
+              '/',
+            );
+            const issueNumber = contentUrlParts[contentUrlParts.length - 1];
+
+            // GET REPO EVENTS
+            const issueEvents = await octokit.request(
+              'GET /repos/:owner/:repo/issues/:issue_number/events',
               {
                 owner,
                 repo,
-                card_id: cards.data[columnCard].id,
+                issue_number: issueNumber,
               },
             );
 
-            core.debug(`Retrieved ${card.data.length} card.`);
+            core.debug(`Retrieved ${issueEvents.data.length} events2.`);
 
-            // TODO: notes (currently ignored)
-            if (typeof card.data.content_url === 'string') {
-              // determine issue number
-              const contentUrlParts = card.data.content_url.split(
-                '/',
-              );
-              const issueNumber = contentUrlParts[contentUrlParts.length - 1];
+            const eventsSummary = issueEvents.data.map(
+              (ev) => {
+                const timeDiff = new Date(ev.created_at).getTime()
+                  - new Date().getTime();
+                const dayDiff = Math.round(
+                  timeDiff / (1000 * 3600 * 24),
+                );
+                return {
+                  event: ev.event,
+                  daysAgo: dayDiff,
+                  project_card: ev.project_card,
+                  time_diff: timeDiff,
+                };
+              },
+            );
 
-              // GET REPO EVENTS
-              const issueEvents = await octokit.request(
-                'GET /repos/:owner/:repo/issues/:issue_number/events',
-                {
-                  owner,
-                  repo,
-                  issue_number: issueNumber,
-                },
-              );
+            // sort by time
+            eventsSummary.sort((a, b) => (a.time_diff > b.time_diff ? 1 : -1));
 
-              core.debug(`Retrieved ${issueEvents.data.length} events2.`);
+            // filter on time period
+            const relevantEvents = [];
 
-              const eventsSummary = issueEvents.data.map(
-                (ev) => {
-                  const timeDiff = new Date(ev.created_at).getTime()
-                    - new Date().getTime();
-                  const dayDiff = Math.round(
-                    timeDiff / (1000 * 3600 * 24),
-                  );
-                  return {
-                    event: ev.event,
-                    daysAgo: dayDiff,
-                    project_card: ev.project_card,
-                    time_diff: timeDiff,
-                  };
-                },
-              );
+            let issueGroup = 0;
+            // 0 - no change
+            // 1 - moved_columns_in_project
+            // 2 - added_to_project, converted_note_to_issue
+            // 3 - reopened
+            // 4 - closed
+            // 5 - removed_from_project (TODO)
 
-              // sort by time
-              eventsSummary.sort((a, b) => (a.time_diff > b.time_diff ? 1 : -1));
+            eventsSummary.forEach((e) => {
+              // filter out events outside time range
+              if (Math.abs(e.daysAgo) <= daysToQuery && e.daysAgo <= 0) {
+                relevantEvents.push(e);
 
-              // filter on time period
-              const relevantEvents = [];
-
-              let issueGroup = 0;
-              // 0 - no change
-              // 1 - moved_columns_in_project
-              // 2 - added_to_project, converted_note_to_issue
-              // 3 - reopened
-              // 4 - closed
-              // 5 - removed_from_project (TODO)
-
-              eventsSummary.forEach((e) => {
-                // filter out events outside time range
-                if (Math.abs(e.daysAgo) <= daysToQuery && e.daysAgo <= 0) {
-                  relevantEvents.push(e);
-
-                  // most relevant change determines grouping
-                  if (e.event === 'moved_columns_in_project' && issueGroup === 0) {
-                    issueGroup = 1;
-                  }
-                  if (e.event === 'added_to_project' || e.event === 'converted_note_to_issue') {
-                    issueGroup = 2;
-                  }
-                  if (e.event === 'reopened') {
-                    issueGroup = 3;
-                  }
-                  if (e.event === 'closed') {
-                    issueGroup = 4;
-                  }
+                // most relevant change determines grouping
+                if (e.event === 'moved_columns_in_project' && issueGroup === 0) {
+                  issueGroup = 1;
                 }
-              });
-
-              // describe flow between now and days ago
-              const flowEvents = relevantEvents.map((ev, i) => {
-                if (ev.project_card && ev.project_card.column_name) {
-                  return (i === 0 && ev.project_card.previous_column_name ? `${ev.project_card.previous_column_name} -> ` : '') + ev.project_card.column_name;
-                } else {
-                  return ev.event;
+                if (e.event === 'added_to_project' || e.event === 'converted_note_to_issue') {
+                  issueGroup = 2;
                 }
-              });
-              const flow = flowEvents.join(' -> ');
+                if (e.event === 'reopened') {
+                  issueGroup = 3;
+                }
+                if (e.event === 'closed') {
+                  issueGroup = 4;
+                }
+              }
+            });
 
-              // get issue details (for title and html url)
-              const issue = await octokit.request(
-                'GET /repos/:owner/:repo/issues/:issue_number',
-                {
-                  owner,
-                  repo,
-                  issue_number: issueNumber,
-                },
-              );
+            // describe flow between now and days ago
+            const flowEvents = relevantEvents.map((ev, i) => {
+              if (ev.project_card && ev.project_card.column_name) {
+                return (i === 0 && ev.project_card.previous_column_name ? `${ev.project_card.previous_column_name} -> ` : '') + ev.project_card.column_name;
+              } else {
+                return ev.event;
+              }
+            });
+            const flow = flowEvents.join(' -> ');
 
-              const issueComments = await octokit.request(
-                '/repos/:owner/:repo/issues/:issue_number/comments',
-                {
-                  owner,
-                  repo,
-                  issue_number: issueNumber,
-                },
-              );
+            // get issue details (for title and html url)
+            const issue = await octokit.request(
+              'GET /repos/:owner/:repo/issues/:issue_number',
+              {
+                owner,
+                repo,
+                issue_number: issueNumber,
+              },
+            );
 
-              const totalComments = issueComments.data.length;
-              const periodComments = issueComments.data.filter(
-                (comment) => {
-                  const timeDiff = new Date(comment.created_at).getTime() - new Date().getTime();
-                  const dayDiff = Math.round(timeDiff / (1000 * 3600 * 24));
-                  return (Math.abs(dayDiff) <= daysToQuery);
-                },
-              ).length;
+            const issueComments = await octokit.request(
+              '/repos/:owner/:repo/issues/:issue_number/comments',
+              {
+                owner,
+                repo,
+                issue_number: issueNumber,
+              },
+            );
 
-              // store card for email content
-              kanbanColumns[col].issues.push({
-                id: issueNumber,
-                html_url: issue.data.html_url,
-                title: issue.data.title,
-                group: issueGroup,
-                flow,
-                totalComments,
-                periodComments,
-              });
-            } else {
-              console.log('ignoring note');
-            }
-          });
-          // sort by group (0-unchanged, 1-moved, 2-added)
-          kanbanColumns[col].issues.sort((a, b) => (a.group > b.group ? 1 : -1));
-        }
+            const totalComments = issueComments.data.length;
+            const periodComments = issueComments.data.filter(
+              (comment) => {
+                const timeDiff = new Date(comment.created_at).getTime() - new Date().getTime();
+                const dayDiff = Math.round(timeDiff / (1000 * 3600 * 24));
+                return (Math.abs(dayDiff) <= daysToQuery);
+              },
+            ).length;
 
-        projectKanbans.push({
-          name: repoProjects.data[p].name,
-          url: repoProjects.data[p].html_url,
-          columns: kanbanColumns,
-          days: daysToQuery,
-          removed: removedIssues,
+            // store card for email content
+            kanbanColumns[col].issues.push({
+              id: issueNumber,
+              html_url: issue.data.html_url,
+              title: issue.data.title,
+              group: issueGroup,
+              flow,
+              totalComments,
+              periodComments,
+            });
+          } else {
+            console.log('ignoring note');
+          }
         });
+        // sort by group (0-unchanged, 1-moved, 2-added)
+        kanbanColumns[col].issues.sort((a, b) => (a.group > b.group ? 1 : -1));
       }
+
+      projectKanbans.push({
+        name: repoProjects.data[p].name,
+        url: repoProjects.data[p].html_url,
+        columns: kanbanColumns,
+        days: daysToQuery,
+        removed: removedIssues,
+      });
     }
-
-    const htmlReport = HTMLReporter.write(projectKanbans);
-
-    // save snapshot as artifact for action run
-    const path = 'kanban/index.html';
-    await makeDir(dirname(path));
-    appendFileSync(path, htmlReport);
-  } catch (error) {
-    core.setFailed(error.message);
   }
+
+  const htmlReport = HTMLReporter.write(projectKanbans);
+
+  // save snapshot as artifact for action run
+  const path = 'kanban/index.html';
+  await makeDir(dirname(path));
+  appendFileSync(path, htmlReport);
 }
 
 run();
